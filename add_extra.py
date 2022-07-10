@@ -32,7 +32,7 @@ CATEGORIES = {
     "Cf": "Format Control Character",
     "Cs": "Surrogate Code Point",
     "Co": "Private-use Character",
-    "Cn": "Reserved Unassigned Code Point"
+    "Cn": "Reserved Unassigned Code Point",
 }
 
 WANTED_BLOCK_TEXT = """
@@ -94,7 +94,7 @@ def get_blocks():
     with blocks_txt.open("r") as fp:
         for line in fp:
             line = line.strip()
-            if line and line[0] in '0123456789ABCDEF':
+            if line and line[0] in "0123456789ABCDEF":
                 # 1FA00..1FA6F; Chess Symbols
                 points, name = line.split("; ")
                 start, end = points.split("..")
@@ -104,8 +104,24 @@ def get_blocks():
     return blocks
 
 
+def get_latex():
+    latex_txt = Path(__file__).parent / "data/unicode-math-symbols.csv"
+    latex = {}
+    with latex_txt.open("r") as fp:
+        for line in fp:
+            line = line.strip().split("^")
+            try:
+                i = int(line[0], 16)
+            except ValueError:
+                continue
+            if "\\" in line[2]:
+                latex[i] = line[2].strip()
+    return latex
+
+
 def main():
     blocks = get_blocks()
+    latex = get_latex()
     for i in range(32, sys.maxunicode):
         x = hex(i)
         try:
@@ -116,7 +132,9 @@ def main():
             cat = unicodedata.category(c)
             category_name = CATEGORIES[cat]
             block = blocks[i]
-            aliases = [name.lower()]
+            aliases = [name.lower(), hex(i)]
+            if i in latex:
+                aliases.append(latex[i])
             alias_str = " | ".join(aliases)
             if block in WANTED_BLOCKS:
                 print(f"{c}\t{category_name}\t{block}\t{name}\t{alias_str}")
@@ -124,5 +142,5 @@ def main():
             continue
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -13,3 +13,5 @@ missing
 
 compile_commands.json
 .ccls-cache/
+
+.idea/
