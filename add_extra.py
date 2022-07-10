@@ -1,141 +1,47 @@
+import csv
 import json
-import sys
+import re
 import unicodedata
 from pathlib import Path
 
-CATEGORIES = {
-    "Lu": "Uppercase Letter",
-    "Ll": "Lowercase Letter",
-    "Lt": "Titlecase Letter",
-    "Lm": "Modifier Letter",
-    "Lo": "Other Letter",
-    "Mn": "Non-spacing Mark",
-    "Mc": "Spacing Mark",
-    "Me": "Enclosing Mark",
-    "Nd": "Decimal Number",
-    "Nl": "Letter Number",
-    "No": "Other Number",
-    "Pc": "Connector Punctuation",
-    "Pd": "Dash Punctuation",
-    "Ps": "Opening Punctuation",
-    "Pe": "Closing Punctuation",
-    "Pi": "Initial Quotation Mark",
-    "Pf": "Final Quotation Mark",
-    "Po": "Other Punctuation",
-    "Sm": "Mathematical Symbol",
-    "Sc": "Currency Sign",
-    "Sk": "Non-letter Modifier Symbol",
-    "So": "Other Symbol",
-    "Zs": "Space Separator",
-    "Zl": "Line Separator",
-    "Zp": "Paragraph Separator",
-    "Cc": "Control Character",
-    "Cf": "Format Control Character",
-    "Cs": "Surrogate Code Point",
-    "Co": "Private-use Character",
-    "Cn": "Reserved Unassigned Code Point",
-}
-
-WANTED_BLOCK_TEXT = """
-Basic Latin
-Latin-1 Supplement
-Latin Extended-A
-Latin Extended-B
-IPA Extensions
-Spacing Modifier Letters
-Combining Diacritical Marks
-Greek and Coptic
-Cyrillic
-Hebrew
-Latin Extended Additional
-Greek Extended
-General Punctuation
-Superscripts and Subscripts
-Currency Symbols
-Combining Diacritical Marks for Symbols
-Letterlike Symbols
-Number Forms
-Arrows
-Mathematical Operators
-Miscellaneous Technical
-Control Pictures
-Enclosed Alphanumerics
-Miscellaneous Symbols
-Dingbats
-Miscellaneous Mathematical Symbols-A
-Supplemental Arrows-A
-Supplemental Arrows-B
-Miscellaneous Mathematical Symbols-B
-Supplemental Mathematical Operators
-Miscellaneous Symbols and Arrows
-Latin Extended-C
-Supplemental Punctuation
-Latin Extended-D
-Latin Extended-E
-Ancient Symbols
-Latin Extended-F
-Mathematical Alphanumeric Symbols
-Playing Cards
-Enclosed Alphanumeric Supplement
-Enclosed Ideographic Supplement
-Miscellaneous Symbols and Pictographs
-Emoticons
-Ornamental Dingbats
-Geometric Shapes Extended
-Supplemental Arrows-C
-Supplemental Symbols and Pictographs
-Chess Symbols
-Symbols and Pictographs Extended-A
-"""
-WANTED_BLOCKS = WANTED_BLOCK_TEXT.strip().splitlines()
-
 DATA_DIR = Path(__file__).parent / "data"
+CATEGORIES = json.loads((DATA_DIR / "categories.json").read_text())
+WANTED_BLOCKS = (DATA_DIR / "wanted-blocks.txt").read_text().strip().splitlines()
+BLOCKS_PATH = DATA_DIR / "Blocks.txt"
+CHARS_PATH = DATA_DIR / "UnicodeData.txt"
+BLOCK_PATTERN = re.compile("^(?P<start>[0-9A-F]+)..(?P<end>[0-9A-F]+); (?P<name>.+)$", re.MULTILINE)
+BLOCKS = [(int(start, 16), int(end, 16), name) for start, end, name in BLOCK_PATTERN.findall(BLOCKS_PATH.read_text())]
+LATEX_LOOKUPS = json.loads((DATA_DIR / "unicode-latex.json").read_text())
 
 
-def get_blocks():
-    blocks = {}
-    with (DATA_DIR / "Blocks.txt").open("r") as fp:
-        for line in fp:
-            line = line.strip()
-            if line and line[0] in "0123456789ABCDEF":
-                # 1FA00..1FA6F; Chess Symbols
-                points, name = line.split("; ")
-                start, end = points.split("..")
-                start, end = int(start, 16), int(end, 16)
-                for i in range(start, end + 1):
-                    blocks[i] = name
-    return blocks
-
-
-def get_latex():
-    with (DATA_DIR / "unicode-latex.json").open("r") as fp:
-        return json.load(fp)
+def get_block(code_point: int):
+    for start, end, name in BLOCKS:
+        if start <= code_point <= end:
+            return name
+    raise ValueError(f"Block not found for codepoint: {code_point}")
 
 
 def main():
-    blocks = get_blocks()
-    latex = get_latex()
-    data_txt = Path(__file__).parent / "data/UnicodeData.txt"
-    for line in data_txt.read_text().splitlines():
-        fields = line.strip().split(";")
-        cp, name, cat = fields[:3]
-        i = int(cp, 16)
-        try:
-            c = chr(i)
-            if "\t" in c:
+    with CHARS_PATH.open("r") as fp:
+        reader = csv.reader(fp, delimiter=";")
+        for row in reader:
+            code_point_hex, name, category_abbrev = row[:3]
+            code_point_int = int(code_point_hex, 16)
+            try:
+                character = chr(code_point_int)
+                if "\t" in character:
+                    continue
+                name = unicodedata.name(character)
+                category_name = CATEGORIES[category_abbrev]
+                block = get_block(code_point_int)
+                aliases = [name.lower(), hex(code_point_int)]
+                if character in LATEX_LOOKUPS:
+                    aliases.append(LATEX_LOOKUPS[character])
+                alias_str = " | ".join(aliases)
+                if block in WANTED_BLOCKS:
+                    print(f"{character}\tUnicode {category_name}\t{block}\t{name}\t{alias_str}")
+            except ValueError:
                 continue
-            name = unicodedata.name(c)
-            cat = unicodedata.category(c)
-            category_name = CATEGORIES[cat]
-            block = blocks[i]
-            aliases = [name.lower(), hex(i)]
-            if c in latex:
-                aliases.append(latex[c])
-            alias_str = " | ".join(aliases)
-            if block in WANTED_BLOCKS:
-                print(f"{c}\tUnicode {category_name}\t{block}\t{name}\t{alias_str}")
-        except ValueError:
-            continue
 
 
 if __name__ == "__main__":
