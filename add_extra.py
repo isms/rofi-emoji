@@ -1,3 +1,4 @@
+import json
 import sys
 import unicodedata
 from pathlib import Path
@@ -36,62 +37,64 @@ CATEGORIES = {
 }
 
 WANTED_BLOCK_TEXT = """
-0000..007F; Basic Latin
-0080..00FF; Latin-1 Supplement
-0100..017F; Latin Extended-A
-0180..024F; Latin Extended-B
-0250..02AF; IPA Extensions
-02B0..02FF; Spacing Modifier Letters
-0300..036F; Combining Diacritical Marks
-0370..03FF; Greek and Coptic
-0400..04FF; Cyrillic
-0590..05FF; Hebrew
-1E00..1EFF; Latin Extended Additional
-1F00..1FFF; Greek Extended
-2000..206F; General Punctuation
-2070..209F; Superscripts and Subscripts
-20A0..20CF; Currency Symbols
-20D0..20FF; Combining Diacritical Marks for Symbols
-2100..214F; Letterlike Symbols
-2150..218F; Number Forms
-2190..21FF; Arrows
-2200..22FF; Mathematical Operators
-2300..23FF; Miscellaneous Technical
-2400..243F; Control Pictures
-2460..24FF; Enclosed Alphanumerics
-2600..26FF; Miscellaneous Symbols
-2700..27BF; Dingbats
-27C0..27EF; Miscellaneous Mathematical Symbols-A
-27F0..27FF; Supplemental Arrows-A
-2900..297F; Supplemental Arrows-B
-2980..29FF; Miscellaneous Mathematical Symbols-B
-2A00..2AFF; Supplemental Mathematical Operators
-2B00..2BFF; Miscellaneous Symbols and Arrows
-2C60..2C7F; Latin Extended-C
-2E00..2E7F; Supplemental Punctuation
-A720..A7FF; Latin Extended-D
-AB30..AB6F; Latin Extended-E
-10190..101CF; Ancient Symbols
-1D400..1D7FF; Mathematical Alphanumeric Symbols
-1F0A0..1F0FF; Playing Cards
-1F100..1F1FF; Enclosed Alphanumeric Supplement
-1F200..1F2FF; Enclosed Ideographic Supplement
-1F300..1F5FF; Miscellaneous Symbols and Pictographs
-1F600..1F64F; Emoticons
-1F650..1F67F; Ornamental Dingbats
-1F780..1F7FF; Geometric Shapes Extended
-1F800..1F8FF; Supplemental Arrows-C
-1F900..1F9FF; Supplemental Symbols and Pictographs
-1FA00..1FA6F; Chess Symbols
-1FA70..1FAFF; Symbols and Pictographs Extended-A
+Basic Latin
+Latin-1 Supplement
+Latin Extended-A
+Latin Extended-B
+IPA Extensions
+Spacing Modifier Letters
+Combining Diacritical Marks
+Greek and Coptic
+Cyrillic
+Hebrew
+Latin Extended Additional
+Greek Extended
+General Punctuation
+Superscripts and Subscripts
+Currency Symbols
+Combining Diacritical Marks for Symbols
+Letterlike Symbols
+Number Forms
+Arrows
+Mathematical Operators
+Miscellaneous Technical
+Control Pictures
+Enclosed Alphanumerics
+Miscellaneous Symbols
+Dingbats
+Miscellaneous Mathematical Symbols-A
+Supplemental Arrows-A
+Supplemental Arrows-B
+Miscellaneous Mathematical Symbols-B
+Supplemental Mathematical Operators
+Miscellaneous Symbols and Arrows
+Latin Extended-C
+Supplemental Punctuation
+Latin Extended-D
+Latin Extended-E
+Ancient Symbols
+Latin Extended-F
+Mathematical Alphanumeric Symbols
+Playing Cards
+Enclosed Alphanumeric Supplement
+Enclosed Ideographic Supplement
+Miscellaneous Symbols and Pictographs
+Emoticons
+Ornamental Dingbats
+Geometric Shapes Extended
+Supplemental Arrows-C
+Supplemental Symbols and Pictographs
+Chess Symbols
+Symbols and Pictographs Extended-A
 """
-WANTED_BLOCKS = [line.split("; ")[1] for line in WANTED_BLOCK_TEXT.strip().splitlines()]
+WANTED_BLOCKS = WANTED_BLOCK_TEXT.strip().splitlines()
+
+DATA_DIR = Path(__file__).parent / "data"
 
 
 def get_blocks():
-    blocks_txt = Path(__file__).parent / "data/Blocks.txt"
     blocks = {}
-    with blocks_txt.open("r") as fp:
+    with (DATA_DIR / "Blocks.txt").open("r") as fp:
         for line in fp:
             line = line.strip()
             if line and line[0] in "0123456789ABCDEF":
@@ -105,36 +108,29 @@ def get_blocks():
 
 
 def get_latex():
-    latex_txt = Path(__file__).parent / "data/unicode-math-symbols.csv"
-    latex = {}
-    with latex_txt.open("r") as fp:
-        for line in fp:
-            line = line.strip().split("^")
-            try:
-                i = int(line[0], 16)
-            except ValueError:
-                continue
-            if "\\" in line[2]:
-                latex[i] = line[2].strip()
-    return latex
+    with (DATA_DIR / "unicode-latex.json").open("r") as fp:
+        return json.load(fp)
 
 
 def main():
     blocks = get_blocks()
     latex = get_latex()
-    for i in range(32, sys.maxunicode):
-        x = hex(i)
+    data_txt = Path(__file__).parent / "data/UnicodeData.txt"
+    for line in data_txt.read_text().splitlines():
+        fields = line.strip().split(";")
+        cp, name, cat = fields[:3]
+        i = int(cp, 16)
         try:
             c = chr(i)
-            if c == "\t":
+            if "\t" in c:
                 continue
             name = unicodedata.name(c)
             cat = unicodedata.category(c)
             category_name = CATEGORIES[cat]
             block = blocks[i]
             aliases = [name.lower(), hex(i)]
-            if i in latex:
-                aliases.append(latex[i])
+            if c in latex:
+                aliases.append(latex[c])
             alias_str = " | ".join(aliases)
             if block in WANTED_BLOCKS:
                 print(f"{c}\t{category_name}\t{block}\t{name}\t{alias_str}")
