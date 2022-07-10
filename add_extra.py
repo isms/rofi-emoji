@@ -133,7 +133,7 @@ def main():
                 aliases.append(latex[c])
             alias_str = " | ".join(aliases)
             if block in WANTED_BLOCKS:
-                print(f"{c}\t{category_name}\t{block}\t{name}\t{alias_str}")
+                print(f"{c}\tUnicode {category_name}\t{block}\t{name}\t{alias_str}")
         except ValueError:
             continue
 
